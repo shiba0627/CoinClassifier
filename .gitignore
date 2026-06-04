@@ -17,3 +17,6 @@ runs/
 *.JPG
 yolov8n-cls.pt
 推論/
+
+# Allow result images
+!result_*.jpg
