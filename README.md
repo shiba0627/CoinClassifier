@@ -1,78 +1,107 @@
-# CoinClassifier (YOLOv8 画像分類)
+# CoinClassifier — YOLOv8 硬貨認識プロジェクト
 
-このプロジェクトは、**YOLOv8** を用いて日本国硬貨（1円、5円、10円、50円、100円、500円）の種類を自動識別するプログラムです。
-特に「YOLOを初めて触る方」が、画像分類の仕組みから実際の応用（OpenCVとの連携）までをスムーズに学べるように設計されています。
-
----
-
-## 🔰 YOLO初心者向けの基礎知識
-
-YOLO (You Only Look Once) と聞くと「物体検出（バウンディングボックスで囲むやつ）」をイメージする方が多いですが、実は用途によってモデルを使い分ける必要があります。
-
-1. **Object Detection (物体検出)**: `yolov8n.pt` など
-   - 1枚の画像の中に「何が」「どこに」あるかを複数同時に見つけるモデル。
-   - 学習データとして、画像内のどこに硬貨があるかを示す四角形の枠（アノテーション）が必要です。
-2. **Classification (画像分類)**: `yolov8n-cls.pt` など 👈 **今回はコレ！**
-   - 1枚の画像の中に「何が写っているか」を1つだけ当てるモデル。
-   - 学習データは「100円玉だけが写った画像」「10円玉だけが写った画像」をフォルダ分けするだけで済むため、初心者でも非常に簡単に学習を始められます。
+**YOLOv8** を用いて日本国硬貨（1円、5円、10円、50円、100円、500円）を認識するプロジェクトです。
+**画像分類 (Classification)** と **物体検出 (Object Detection)** の両方に対応しています。
 
 ---
 
-## 📂 プロジェクトの構成
+## 📂 プロジェクト構成
 
-- `main.py`
-  - YOLOのモデルを学習させるためのスクリプトです。
-  - `data/` フォルダ内の画像を使って、硬貨を分類するAIを育成します。
-- `infer.py`
-  - 学習したAI（モデル）を使って、1枚の画像（硬貨が1つだけ写っている画像）が何円玉かをテストするシンプルな推論スクリプトです。
-- `detect_coins.py`
-  - **応用編！** 複数枚の硬貨が写っている画像（例: `kadai_01.JPG` など）から、OpenCVのハフ変換という技術を使って硬貨を1枚ずつ自動で探し出し、それぞれをYOLOで分類して合計金額を計算するスクリプトです。
-- `runs/`
-  - YOLOが学習や推論を行った結果（グラフや重みファイルなど）が自動で保存されるフォルダです。
+```
+coinyolo/
+├── classification/              # 画像分類
+│   ├── train.py                 #   学習スクリプト
+│   ├── infer.py                 #   推論スクリプト
+│   ├── detect_coins.py          #   応用: 複数硬貨の合計金額計算
+│   └── data/                    #   データセット (train/val)
+│
+├── detection/                   # 物体検出
+│   ├── train.py                 #   学習スクリプト
+│   ├── annotate.py              #   アノテーションGUIツール
+│   └── data/                    #   データセット
+│       ├── raw/                 #     元画像
+│       ├── annotations/         #     YOLOラベル (.txt)
+│       └── dataset/             #     学習用 (自動生成)
+│
+├── images/                      # 共有画像
+│   ├── test/                    #   テスト用画像 (kadai_01〜10)
+│   └── results/                 #   推論結果出力先
+│       ├── classification/
+│       └── detection/
+│
+├── models/                      # ベースモデル (.pt)
+├── runs/                        # 学習結果 (自動生成)
+├── scripts/                     # 過去のスクリプト集
+└── README.md
+```
+
+> **全スクリプトはプロジェクトルートから実行してください。**
 
 ---
 
 ## 🚀 使い方
 
-### 1. 環境構築
-Pythonのパッケージ管理ツールである `uv` を使用します。
+### 環境構築
 ```bash
-# パッケージのインストール（ultralytics, opencv-python 等）
 uv sync
 ```
 
-### 2. 学習（Training）
-独自のAIを作るための第一歩です。
-```bash
-uv run python main.py
-```
-> **💡 初心者へのヒント**
-> 学習が終わると、`runs/classify/train/weights/` フォルダに `best.pt` というファイルが生成されます。
-> これが「一番成績が良かったAIの脳みそ（重みデータ）」です。以降の推論ではこのファイルを読み込んで使います。
-> また、`runs/classify/train/` 内にある `results.png` などの画像を見ると、AIがどのように賢くなっていったかのグラフを確認できます！
+### 画像分類 (Classification)
 
-### 3. テスト推論（Inference）
-1枚の硬貨画像に対して、正しく分類できるか試してみます。
+1枚の画像に写った硬貨の種類を判定します。
+
 ```bash
-uv run python infer.py
+# 学習
+uv run python classification/train.py
+
+# 推論テスト
+uv run python classification/infer.py
+
+# 応用: 複数硬貨の合計金額計算
+uv run python classification/detect_coins.py
 ```
 
-### 4. 実践！複数の硬貨から合計金額を計算
-「分類モデルは1枚の画像に1つの物体しか判定できない」という弱点を、OpenCVの画像処理技術でカバーする実践的なスクリプトです。
+### 物体検出 (Object Detection)
+
+1枚の画像内の複数硬貨の位置と種類を同時に検出します。
+
 ```bash
-uv run python detect_coins.py
+# アノテーション (BBox付与ツール)
+uv run python detection/annotate.py
+
+# 学習
+uv run python detection/train.py
 ```
-> **💡 スクリプトの仕組み**
-> 1. OpenCVの `cv2.HoughCircles`（円を数学的に見つける関数）で硬貨の場所を精密に特定。
-> 2. 見つけた円の形に合わせて画像を小さく切り抜く（クロップ）。
-> 3. 切り抜いた画像を1枚ずつ、精度100%のYOLOモデル（`best.pt`）に渡して何円玉か教えてもらう。
-> 4. 金額を足し合わせて、結果の画像を保存！
 
 ---
+
+## 🔰 YOLO初心者向けの基礎知識
+
+| 方式 | モデル | 用途 | 学習データの準備 |
+|---|---|---|---|
+| **Classification** | `yolov8n-cls.pt` | 画像1枚 → 種類を1つ判定 | フォルダ分けするだけ（簡単） |
+| **Detection** | `yolov8n.pt` | 画像1枚 → 複数物体の位置と種類を検出 | BBoxアノテーションが必要 |
+
+---
+
+## 物体検出結果
+
+![結果](./images/results/detection/result_kadai_01.jpg)
+![結果](./images/results/detection/result_kadai_02.jpg)
+![結果](./images/results/detection/result_kadai_03.jpg)
+![結果](./images/results/detection/result_kadai_04.jpg)
+![結果](./images/results/detection/result_kadai_05.jpg)
+![結果](./images/results/detection/result_kadai_06.jpg)
+![結果](./images/results/detection/result_kadai_07.jpg)
+![結果](./images/results/detection/result_kadai_08.jpg)
+![結果](./images/results/detection/result_kadai_09.jpg)
+![結果](./images/results/detection/result_kadai_10.jpg)
+
 
 ## 🛠️ トラブルシューティング
 
 - **Q. Macで学習が遅い / 警告が出る**
-  - Apple Silicon (M1/M2/M3/M4) をお使いの場合は、学習スクリプト内の引数に `device='mps'` を指定することでGPUを使った劇的な高速化が可能です（本プロジェクトでは設定済みです）。
+  - Apple Silicon (M1/M2/M3/M4) をお使いの場合は `device='mps'` を指定してGPU高速化が可能です（設定済み）。
 - **Q. detect_coins.py で硬貨を取りこぼす**
-  - 背景の模様が複雑な場合や、硬貨が重なっている場合は円検出が難しくなります。`detect_coins.py` 内の `cv2.HoughCircles` のパラメータ（`param1`, `param2`, `minRadius` など）を調整することで検出精度を上げることができます。
+  - `cv2.HoughCircles` のパラメータ（`param1`, `param2`, `minRadius` など）を調整してください。
+

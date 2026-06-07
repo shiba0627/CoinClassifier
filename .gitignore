@@ -10,13 +10,20 @@ wheels/
 .venv
 .venv/
 
-# Project specifics
-data/
-runs/
-*.jpg
-*.JPG
-yolov8n-cls.pt
-推論/
+# データセット (大容量のため Git 管理外)
+classification/data/
+detection/data/
+images/test/
+images/results/classification/
+images/results/detection/*
+!images/results/detection/result_kadai_*.jpg
 
-# Allow result images
-!result_*.jpg
+# 学習結果 (大容量のため Git 管理外)
+runs/
+
+# モデルファイル
+models/*.pt
+
+# キャッシュ
+*.cache
+.DS_Store

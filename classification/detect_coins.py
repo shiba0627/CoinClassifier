@@ -98,7 +98,7 @@ def process_coins(image_path, model, output_path='result_output.jpg'):
 
 if __name__ == "__main__":
     # モデルのロードをループの外で行う（高速化のため）
-    model_path = 'runs/classify/train/weights/best.pt'
+    model_path = 'runs/classify/train/weights/best.pt'  # プロジェクトルートから実行
     print(f"モデルをロード中: {model_path}")
     loaded_model = YOLO(model_path)
     
@@ -108,15 +108,15 @@ if __name__ == "__main__":
         base_name = f"kadai_{i:02d}"
         target_file = None
         
-        if os.path.exists(f"推論/{base_name}.JPG"):
-            target_file = f"推論/{base_name}.JPG"
-        elif os.path.exists(f"推論/{base_name}.jpg"):
-            target_file = f"推論/{base_name}.jpg"
+        if os.path.exists(f"images/test/{base_name}.JPG"):
+            target_file = f"images/test/{base_name}.JPG"
+        elif os.path.exists(f"images/test/{base_name}.jpg"):
+            target_file = f"images/test/{base_name}.jpg"
             
         if target_file:
-            out_file = f"result_{base_name}.jpg"
+            out_file = f"images/results/classification/result_{base_name}.jpg"
             process_coins(target_file, loaded_model, output_path=out_file)
         else:
-            print(f"推論/{base_name}.JPG は見つかりませんでした。")
+            print(f"images/test/{base_name}.JPG は見つかりませんでした。")
 
 

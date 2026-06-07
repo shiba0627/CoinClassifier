@@ -2,10 +2,10 @@ from ultralytics import YOLO
 
 def main():
     # 学習済みのベストモデルを読み込む
-    model = YOLO('runs/classify/train/weights/best.pt')
+    model = YOLO('runs/classify/train/weights/best.pt')  # プロジェクトルートから実行
 
     # テスト対象の画像パス
-    image_path = '推論/kadai_01.JPG'
+    image_path = 'images/test/kadai_01.JPG'
 
     # 推論（識別）の実行
     print(f"Running inference on {image_path}...")
