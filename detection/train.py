@@ -26,10 +26,10 @@ from pathlib import Path
 IMAGE_SOURCE_DIR = "detection/data/raw"              # アノテーション済み画像の元フォルダ
 LABEL_SOURCE_DIR = "detection/data/annotations"       # アノテーションファイルのフォルダ
 DATASET_DIR = "detection/data/dataset"                 # YOLO用データセット出力先
-BASE_MODEL = "models/yolov8n.pt"                       # ベースモデル (物体検出用)
+BASE_MODEL = "models/yolov8s.pt"                       # ベースモデル (物体検出用)
 
 # 学習パラメータ
-EPOCHS = 100
+EPOCHS = 300
 IMAGE_SIZE = 640
 BATCH_SIZE = 8          # 画像枚数が少ないので小さめ
 DEVICE = "mps"          # Apple Silicon Mac
