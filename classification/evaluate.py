@@ -186,7 +186,17 @@ def evaluate_metrics(pred_boxes, gt_boxes, iou_threshold=0.5):
     tp = fp = fn = 0
     metrics_per_class = {cid: {'TP': 0, 'FP': 0, 'FN': 0} for cid in CLS_ID_TO_AMOUNT.keys()}
     
-    # マッチングしたTPを判定
+    # 位置のみのマッチング（硬貨検出率用）
+    location_matched_pred = [False] * len(pred_boxes)
+    location_matched_gt = [False] * len(gt_boxes)
+    location_tp = 0
+    for iou, p_idx, g_idx in iou_matrix:
+        if not location_matched_pred[p_idx] and not location_matched_gt[g_idx]:
+            location_matched_pred[p_idx] = True
+            location_matched_gt[g_idx] = True
+            location_tp += 1
+            
+    # マッチングしたTPを判定 (クラス込)
     for iou, p_idx, g_idx in iou_matrix:
         if not matched_pred[p_idx] and not matched_gt[g_idx]:
             pred_cls = pred_boxes[p_idx][0]
@@ -218,9 +228,9 @@ def evaluate_metrics(pred_boxes, gt_boxes, iou_threshold=0.5):
             metrics_per_class[gt_cls]['FN'] += 1
             fn += 1
             
-    return tp, fp, fn, metrics_per_class
+    return tp, fp, fn, metrics_per_class, location_tp
 
-def draw_and_save(img, pred_boxes, tp, fp, fn, out_path, title_text):
+def draw_and_save(img, pred_boxes, tp, fp, fn, location_tp, total_gt, out_path, title_text):
     """
     推論結果のバウンディングボックスと評価指標を大きく画像に描画して保存
     """
@@ -250,13 +260,15 @@ def draw_and_save(img, pred_boxes, tp, fp, fn, out_path, title_text):
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
     f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+    det_rate = location_tp / total_gt if total_gt > 0 else 0.0
     
     metrics_text = [
         title_text,
         f"TP: {tp}   FP: {fp}   FN: {fn}",
         f"Precision: {precision:.3f}",
         f"Recall: {recall:.3f}",
-        f"F1-Score: {f1:.3f}"
+        f"F1-Score: {f1:.3f}",
+        f"Coin Det. Rate: {det_rate:.1%} ({location_tp}/{total_gt})"
     ]
     
     y_offset = 80
@@ -299,6 +311,10 @@ def evaluate():
     all_metrics_cls = {cid: {'TP': 0, 'FP': 0, 'FN': 0} for cid in CLS_ID_TO_AMOUNT.keys()}
     all_metrics_det = {cid: {'TP': 0, 'FP': 0, 'FN': 0} for cid in CLS_ID_TO_AMOUNT.keys()}
     
+    total_loc_tp_cls = 0
+    total_loc_tp_det = 0
+    total_gt_all = 0
+    
     for i in range(1, 11):
         base_name = f"kadai_{i:02d}"
         
@@ -321,43 +337,50 @@ def evaluate():
             
         orig_height, orig_width = img_orig.shape[:2]
         gt_boxes = read_annotations(ann_path, orig_width, orig_height)
+        gt_count = len(gt_boxes)
+        total_gt_all += gt_count
         
         # Classification推論と評価
         pred_cls = predict_classification(img_orig, cls_model)
-        tp_cls, fp_cls, fn_cls, metrics_c = evaluate_metrics(pred_cls, gt_boxes, iou_threshold=IOU_THRESHOLD)
+        tp_cls, fp_cls, fn_cls, metrics_c, loc_tp_c = evaluate_metrics(pred_cls, gt_boxes, iou_threshold=IOU_THRESHOLD)
+        total_loc_tp_cls += loc_tp_c
         for cid in all_metrics_cls:
             all_metrics_cls[cid]['TP'] += metrics_c[cid]['TP']
             all_metrics_cls[cid]['FP'] += metrics_c[cid]['FP']
             all_metrics_cls[cid]['FN'] += metrics_c[cid]['FN']
             
         out_path_cls = os.path.join(out_dir_cls, f"result_cls_{base_name}.jpg")
-        draw_and_save(img_orig, pred_cls, tp_cls, fp_cls, fn_cls, out_path_cls, "Mode: Classification")
+        draw_and_save(img_orig, pred_cls, tp_cls, fp_cls, fn_cls, loc_tp_c, gt_count, out_path_cls, "Mode: Classification")
         
         # Detection推論と評価
         pred_det = predict_detection(img_orig, det_model, conf_thresh=DETECTION_CONF_THRESH)
-        tp_det, fp_det, fn_det, metrics_d = evaluate_metrics(pred_det, gt_boxes, iou_threshold=IOU_THRESHOLD)
+        tp_det, fp_det, fn_det, metrics_d, loc_tp_d = evaluate_metrics(pred_det, gt_boxes, iou_threshold=IOU_THRESHOLD)
+        total_loc_tp_det += loc_tp_d
         for cid in all_metrics_det:
             all_metrics_det[cid]['TP'] += metrics_d[cid]['TP']
             all_metrics_det[cid]['FP'] += metrics_d[cid]['FP']
             all_metrics_det[cid]['FN'] += metrics_d[cid]['FN']
             
         out_path_det = os.path.join(out_dir_det, f"result_det_{base_name}.jpg")
-        draw_and_save(img_orig, pred_det, tp_det, fp_det, fn_det, out_path_det, "Mode: Detection")
+        draw_and_save(img_orig, pred_det, tp_det, fp_det, fn_det, loc_tp_d, gt_count, out_path_det, "Mode: Detection")
         
-        print(f"{base_name} 完了: GT={len(gt_boxes)} | Cls予測={len(pred_cls)} | Det予測={len(pred_det)}")
+        print(f"{base_name} 完了: GT={gt_count} | Cls予測={len(pred_cls)} | Det予測={len(pred_det)}")
         
     # --- サマリー出力 ---
     p_cls, r_cls, f1_cls, tp_c, fp_c, fn_c = summarize_metrics(all_metrics_cls)
     p_det, r_det, f1_det, tp_d, fp_d, fn_d = summarize_metrics(all_metrics_det)
     
-    print("\n" + "="*60)
+    det_rate_cls = total_loc_tp_cls / total_gt_all if total_gt_all > 0 else 0
+    det_rate_det = total_loc_tp_det / total_gt_all if total_gt_all > 0 else 0
+    
+    print("\n" + "="*80)
     print("モデル比較結果サマリー (全画像トータル)")
-    print("="*60)
-    print(f"{'Mode':<18} | {'TP':<4} | {'FP':<4} | {'FN':<4} | {'Precision':<9} | {'Recall':<9} | {'F1-Score':<9}")
-    print("-" * 75)
-    print(f"{'Classification':<18} | {tp_c:<4} | {fp_c:<4} | {fn_c:<4} | {p_cls:<9.3f} | {r_cls:<9.3f} | {f1_cls:<9.3f}")
-    print(f"{'Detection':<18} | {tp_d:<4} | {fp_d:<4} | {fn_d:<4} | {p_det:<9.3f} | {r_det:<9.3f} | {f1_det:<9.3f}")
-    print("="*60)
+    print("="*80)
+    print(f"{'Mode':<18} | {'TP':<4} | {'FP':<4} | {'FN':<4} | {'Precision':<9} | {'Recall':<9} | {'F1-Score':<9} | {'Det. Rate':<9}")
+    print("-" * 80)
+    print(f"{'Classification':<18} | {tp_c:<4} | {fp_c:<4} | {fn_c:<4} | {p_cls:<9.3f} | {r_cls:<9.3f} | {f1_cls:<9.3f} | {det_rate_cls:.1%} ({total_loc_tp_cls}/{total_gt_all})")
+    print(f"{'Detection':<18} | {tp_d:<4} | {fp_d:<4} | {fn_d:<4} | {p_det:<9.3f} | {r_det:<9.3f} | {f1_det:<9.3f} | {det_rate_det:.1%} ({total_loc_tp_det}/{total_gt_all})")
+    print("="*80)
     print(f"\n[Classification 画像] -> {out_dir_cls}")
     print(f"[Detection 画像]      -> {out_dir_det}")
 
