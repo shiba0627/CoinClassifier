@@ -1,0 +1,5 @@
+path: /Users/tonegawa/program/coinyolo/images/test/annotations
+train: images/train
+val: images/val
+nc: 6
+names: ['1', '5', '10', '50', '100', '500']

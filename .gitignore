@@ -13,10 +13,21 @@ wheels/
 # データセット (大容量のため Git 管理外)
 classification/data/
 detection/data/
-images/test/
-images/results/classification/
-images/results/detection/*
-!images/results/detection/result_kadai_*.jpg
+
+# images/test/ 内は課題関連のみGit管理
+images/test/*
+!images/test/kadai_*
+!images/test/annotations/
+
+# images/results/ はREADMEで使う画像のみGit管理
+images/results/*
+!images/results/evaluation_classification/
+images/results/evaluation_classification/*
+!images/results/evaluation_classification/result_cls_kadai_*.jpg
+
+!images/results/evaluation_detection/
+images/results/evaluation_detection/*
+!images/results/evaluation_detection/result_det_kadai_*.jpg
 
 # 学習結果 (大容量のため Git 管理外)
 runs/
@@ -26,4 +37,12 @@ models/*.pt
 
 # キャッシュ
 *.cache
+
+# OS-specific files
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
