@@ -34,7 +34,7 @@ def main():
             
         print(f"推論中: {base_name} ...", end=" ")
         
-        results = model(img_path, conf=0.3, verbose=False)
+        results = model(img_path, conf=0.6, verbose=False)
         
         for r in results:
             out_path = os.path.join(output_dir, f"result_{base_name}.jpg")

@@ -3,18 +3,88 @@
 **YOLOv8** を用いて日本国硬貨（1円、5円、10円、50円、100円、500円）を認識するプロジェクトです。
 **画像分類 (Classification)** と **物体検出 (Object Detection)** の両方に対応しています。
 
+## 📑 目次
+- [2つのアプローチの比較](#-2つのアプローチの比較)
+- [環境構築と使い方](#-環境構築と使い方)
+- [プロジェクト構成とスクリプト詳細](#-プロジェクト構成とスクリプト詳細)
+- [推論精度の比較と可視化](#-推論精度の比較と可視化-classification-vs-detection)
+- [FAQ・トラブルシューティング](#-faqトラブルシューティング)
+
 ---
 
-## 📂 プロジェクト構成
+## 🔍 2つのアプローチの比較
 
+本プロジェクトでは、2種類のモデルを用いてアプローチの違いを検証・実装しています。
+
+| 方式 | モデル | 用途 | 学習データの準備 |
+|---|---|---|---|
+| **Classification (画像分類)** | `yolov8n-cls.pt` | 画像1枚 → 種類を1つ判定 | フォルダ分けするだけ（簡単） |
+| **Detection (物体検出)** | `yolov8n.pt` | 画像1枚 → 複数物体の位置と種類を検出 | BBoxアノテーションが必要 |
+
+---
+
+## 🚀 環境構築と使い方
+
+### 📦 `uv` パッケージマネージャーについて（初心者向け）
+
+本プロジェクトでは、Pythonのパッケージ管理・実行ツールとして **[uv](https://docs.astral.sh/uv/)** を使用しています。
+`uv` は従来の `pip` や `venv` よりも**非常に高速**で、仮想環境の構築からライブラリのインストールまでを自動で行ってくれます。
+
+> **実行時のルール:**
+> すべてのPythonスクリプトは `python ...` ではなく、**`uv run python ...`** という形式で実行します。
+> これにより、手動で仮想環境を有効化（activate）しなくても、プロジェクト専用のクリーンな環境で安全にスクリプトを実行できます。
+
+### 1. 環境構築
+
+初回のみ、以下のコマンドを実行して必要なライブラリ（OpenCVやYOLOなど）を自動でインストールします。
+
+```bash
+uv sync
 ```
+
+### 2. 画像分類 (Classification) の実行
+
+1枚の画像に写った硬貨の種類を判定します。
+
+```bash
+# 学習
+uv run python classification/train.py
+
+# 推論テスト
+uv run python classification/infer.py
+
+# 応用: 複数硬貨の合計金額計算
+uv run python classification/detect_coins.py
+```
+
+### 3. 物体検出 (Object Detection) の実行
+
+1枚の画像内の複数硬貨の位置と種類を同時に検出します。
+
+```bash
+# アノテーション (BBox付与ツール)
+uv run python detection/annotate.py
+
+# 学習
+uv run python detection/train.py
+```
+
+---
+
+## 📂 プロジェクト構成とスクリプト詳細
+
+### ディレクトリ構成
+
+```text
 coinyolo/
 ├── classification/              # 画像分類
 │   ├── train.py                 #   学習スクリプト
 │   ├── infer.py                 #   単一画像の推論テスト用スクリプト
 │   ├── detect_coins.py          #   Hough変換による硬貨切り抜きとYOLO分類を組み合わせた合計金額計算スクリプト
-│   ├── evaluate.py              #   推論結果（Classification/Detection）と正解データを比較し精度評価（TP, FP, FN等）を行うスクリプト
 │   └── data/                    #   データセット (train/val)
+│
+├── evaluation/                  # 評価
+│   └── evaluate.py              #   推論結果（Classification/Detection）と正解データを比較し精度評価を行うスクリプト
 │
 ├── detection/                   # 物体検出
 │   ├── train.py                 #   学習スクリプト
@@ -43,21 +113,19 @@ coinyolo/
 
 > **全スクリプトはプロジェクトルートから実行してください。**
 
----
+### 各スクリプトの詳細
 
-## 📜 各スクリプトの詳細
-
-### Classification (画像分類) 用スクリプト
+#### Classification (画像分類) 用スクリプト
 - **`classification/train.py`**
   - 用途: YOLOv8の分類モデル（`yolov8n-cls.pt`）を用いて、切り抜かれた硬貨画像の学習を行います。
 - **`classification/infer.py`**
   - 用途: 学習済みの分類モデルを用いて、画像1枚がどの硬貨に該当するかを推論テストします。
 - **`classification/detect_coins.py`**
   - 用途: テスト画像全体から `cv2.HoughCircles`（OpenCV）を用いて円を検出し、切り抜いた各領域に対して分類モデルを適用して、画像全体の合計金額を算出します。
-- **`classification/evaluate.py`**
+- **`evaluation/evaluate.py`**
   - 用途: `detect_coins.py` (Classification方式) および `results_test.py` (Detection方式) の推論結果と、ユーザーが作成した正解データ（Ground Truth）のBBoxとの IoU (Intersection over Union) を計算し、**Precision, Recall, F1-Score** などの評価指標を算出・比較します。結果は画像ファイルおよびターミナル出力に保存されます。
 
-### Detection (物体検出) 用スクリプト
+#### Detection (物体検出) 用スクリプト
 - **`detection/train.py`**
   - 用途: YOLOv8の物体検出モデル（`yolov8n.pt`）を用いて、画像内の硬貨の「位置（バウンディングボックス）」と「種類（クラス）」を同時に検出する学習を行います。
 - **`detection/annotate.py`**
@@ -65,70 +133,11 @@ coinyolo/
 - **`detection/results_test.py`**
   - 用途: 学習済みの物体検出モデルを用いて、テスト画像群に対して一括で推論を行い、バウンディングボックスを描画した結果画像を保存します。
 
-### ルートディレクトリの便利スクリプト
+#### ルートディレクトリの便利スクリプト
 - **`check_labels.py`**
   - 用途: 作成したアノテーションファイル（YOLO形式）を読み込み、元の画像上に正しくバウンディングボックスが描画されるかを確認するための検証用スクリプトです。
 - **`check_pil.py`**
   - 用途: Python Imaging Library (Pillow) が正しく動作しているかを確認するための簡易スクリプトです。
-
-> **全スクリプトはプロジェクトルートから実行してください。**
-
----
-
-## 🚀 使い方
-
-### 📦 `uv` パッケージマネージャーについて（初心者向け）
-
-本プロジェクトでは、Pythonのパッケージ管理・実行ツールとして **[uv](https://docs.astral.sh/uv/)** を使用しています。
-`uv` は従来の `pip` や `venv` よりも**非常に高速**で、仮想環境の構築からライブラリのインストールまでを自動で行ってくれます。
-
-> **実行時のルール:**
-> すべてのPythonスクリプトは `python ...` ではなく、**`uv run python ...`** という形式で実行します。
-> これにより、手動で仮想環境を有効化（activate）しなくても、プロジェクト専用のクリーンな環境で安全にスクリプトを実行できます。
-
-### 1. 環境構築
-
-初回のみ、以下のコマンドを実行して必要なライブラリ（OpenCVやYOLOなど）を自動でインストールします。
-
-```bash
-uv sync
-```
-
-### 画像分類 (Classification)
-
-1枚の画像に写った硬貨の種類を判定します。
-
-```bash
-# 学習
-uv run python classification/train.py
-
-# 推論テスト
-uv run python classification/infer.py
-
-# 応用: 複数硬貨の合計金額計算
-uv run python classification/detect_coins.py
-```
-
-### 物体検出 (Object Detection)
-
-1枚の画像内の複数硬貨の位置と種類を同時に検出します。
-
-```bash
-# アノテーション (BBox付与ツール)
-uv run python detection/annotate.py
-
-# 学習
-uv run python detection/train.py
-```
-
----
-
-## 🔰 YOLO初心者向けの基礎知識
-
-| 方式 | モデル | 用途 | 学習データの準備 |
-|---|---|---|---|
-| **Classification** | `yolov8n-cls.pt` | 画像1枚 → 種類を1つ判定 | フォルダ分けするだけ（簡単） |
-| **Detection** | `yolov8n.pt` | 画像1枚 → 複数物体の位置と種類を検出 | BBoxアノテーションが必要 |
 
 ---
 
@@ -198,8 +207,9 @@ uv run python detection/train.py
 
 ---
 
+## ❓ FAQ・トラブルシューティング
+
 - **Q. Macで学習が遅い / 警告が出る**
   - Apple Silicon (M1/M2/M3/M4) をお使いの場合は `device='mps'` を指定してGPU高速化が可能です（設定済み）。
 - **Q. detect_coins.py で硬貨を取りこぼす**
   - `cv2.HoughCircles` のパラメータ（`param1`, `param2`, `minRadius` など）を調整してください。
-

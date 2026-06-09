@@ -25,9 +25,9 @@ CLASS_COLORS_BGR = {
 }
 
 # --- 評価用パラメータ（変更しやすいように上部に配置） ---
-IOU_THRESHOLD = 0.5               # 正解と推論のIoU閾値
-CLASSIFICATION_CONF_THRESH = 0.4  # Classification時の確信度閾値
-DETECTION_CONF_THRESH = 0.3       # Detection時の確信度閾値
+IOU_THRESHOLD = 0.2               # 正解と推論のIoU閾値
+CLASSIFICATION_CONF_THRESH = 0.5  # Classification時の確信度閾値
+DETECTION_CONF_THRESH = 0.5       # Detection時の確信度閾値
 # --------------------------------------------------------
 
 def calculate_iou(box1, box2):
@@ -242,7 +242,10 @@ def draw_and_save(img, pred_boxes, tp, fp, fn, location_tp, total_gt, out_path, 
     metrics_font_thickness = 8
     
     img_draw = img.copy()
+    overlay = img_draw.copy()
+    labels_to_draw = []
     
+    # 1. テキストの背景（塗りつぶし）をoverlayに描画
     for p_idx, pred in enumerate(pred_boxes):
         cls_id = pred[0]
         x1, y1, x2, y2 = map(int, pred[1:5])
@@ -250,12 +253,19 @@ def draw_and_save(img, pred_boxes, tp, fp, fn, location_tp, total_gt, out_path, 
         amount_str = f"{CLS_ID_TO_AMOUNT[cls_id]}Yen"
         color = CLASS_COLORS_BGR.get(cls_id, (0, 255, 0))
         
-        cv2.rectangle(img_draw, (x1, y1), (x2, y2), color, box_thickness)
-        
         label = f"{amount_str} ({conf:.2f})"
         (text_w, text_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
-        cv2.rectangle(img_draw, (x1, max(y1 - text_h - 20, 0)), (x1 + text_w, max(y1, text_h + 20)), color, -1)
-        cv2.putText(img_draw, label, (x1, max(y1 - 10, 10)), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), font_thickness)
+        
+        # 背景を塗りつぶし (半透明用)
+        cv2.rectangle(overlay, (x1, max(y1 - text_h - 20, 0)), (x1 + text_w, max(y1, text_h + 20)), color, -1)
+        
+        # 後で描画するために情報（文字、文字位置、枠座標、色）を保存
+        labels_to_draw.append({
+            'label': label,
+            'pos': (x1, max(y1 - 10, 10)),
+            'box': (x1, y1, x2, y2),
+            'color': color
+        })
         
     precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
     recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
@@ -271,12 +281,27 @@ def draw_and_save(img, pred_boxes, tp, fp, fn, location_tp, total_gt, out_path, 
         f"Coin Det. Rate: {det_rate:.1%} ({location_tp}/{total_gt})"
     ]
     
+    # 2. 評価指標の背景（黒）をoverlayに描画
     y_offset = 80
+    metrics_info = []
     for text in metrics_text:
         (text_w, text_h), baseline = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, metrics_font_scale, metrics_font_thickness)
-        cv2.rectangle(img_draw, (40, y_offset - text_h - 20), (40 + text_w + 20, y_offset + baseline + 20), (0, 0, 0), -1)
-        cv2.putText(img_draw, text, (50, y_offset), cv2.FONT_HERSHEY_SIMPLEX, metrics_font_scale, (255, 255, 255), metrics_font_thickness)
+        cv2.rectangle(overlay, (40, y_offset - text_h - 20), (40 + text_w + 20, y_offset + baseline + 20), (0, 0, 0), -1)
+        metrics_info.append((text, (50, y_offset)))
         y_offset += text_h + 60
+        
+    # 3. 半透明で合成 (Alpha Blending)
+    alpha = 0.5
+    cv2.addWeighted(overlay, alpha, img_draw, 1 - alpha, 0, img_draw)
+    
+    # 4. バウンディングボックスの枠線と文字を「不透明」で描画
+    for item in labels_to_draw:
+        x1, y1, x2, y2 = item['box']
+        cv2.rectangle(img_draw, (x1, y1), (x2, y2), item['color'], box_thickness)
+        cv2.putText(img_draw, item['label'], item['pos'], cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), font_thickness)
+        
+    for text, pos in metrics_info:
+        cv2.putText(img_draw, text, pos, cv2.FONT_HERSHEY_SIMPLEX, metrics_font_scale, (255, 255, 255), metrics_font_thickness)
         
     cv2.imwrite(out_path, img_draw)
 
@@ -350,7 +375,8 @@ def evaluate():
             all_metrics_cls[cid]['FN'] += metrics_c[cid]['FN']
             
         out_path_cls = os.path.join(out_dir_cls, f"result_cls_{base_name}.jpg")
-        draw_and_save(img_orig, pred_cls, tp_cls, fp_cls, fn_cls, loc_tp_c, gt_count, out_path_cls, "Mode: Classification")
+        title_cls = f"Mode: Classification (Conf: {CLASSIFICATION_CONF_THRESH})"
+        draw_and_save(img_orig, pred_cls, tp_cls, fp_cls, fn_cls, loc_tp_c, gt_count, out_path_cls, title_cls)
         
         # Detection推論と評価
         pred_det = predict_detection(img_orig, det_model, conf_thresh=DETECTION_CONF_THRESH)
@@ -362,7 +388,8 @@ def evaluate():
             all_metrics_det[cid]['FN'] += metrics_d[cid]['FN']
             
         out_path_det = os.path.join(out_dir_det, f"result_det_{base_name}.jpg")
-        draw_and_save(img_orig, pred_det, tp_det, fp_det, fn_det, loc_tp_d, gt_count, out_path_det, "Mode: Detection")
+        title_det = f"Mode: Detection (Conf: {DETECTION_CONF_THRESH})"
+        draw_and_save(img_orig, pred_det, tp_det, fp_det, fn_det, loc_tp_d, gt_count, out_path_det, title_det)
         
         print(f"{base_name} 完了: GT={gt_count} | Cls予測={len(pred_cls)} | Det予測={len(pred_det)}")
         
